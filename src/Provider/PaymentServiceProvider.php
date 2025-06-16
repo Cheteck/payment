@@ -23,6 +23,12 @@ class PaymentServiceProvider extends ServiceProvider
     {
         $this->loadViewsFrom(__DIR__ . '/../../resources/views', 'shetabitPayment');
 
+        $this->loadTranslationsFrom(__DIR__.'/../../resources/lang', 'shetabitPayment');
+
+        $this->publishes([
+            __DIR__.'/../../resources/lang' => resource_path('lang/vendor/shetabitPayment'),
+        ], 'payment-lang');
+
         /**
          * Configurations that needs to be done by user.
          */

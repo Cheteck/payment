@@ -45,6 +45,7 @@ For PHP integration you can use [shetabit/multipay](https://github.com/shetabit/
   - [Security](#security)
   - [Credits](#credits)
   - [License](#license)
+- [Intégration des Paiements en Algérie](#intégration-des-paiements-en-algérie)
 
 # List of available drivers
 
@@ -518,6 +519,174 @@ If you discover any security related issues, please email khanzadimahdi@gmail.co
 ## License
 
 The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+
+## Intégration des Paiements en Algérie
+
+Cette section décrit comment configurer et utiliser le package `shetabit/payment` pour les moyens de paiement populaires en Algérie : Edahabia (Algérie Poste) et CIB.
+
+### Passerelles Supportées
+*   **Edahabia**: Via la classe `Shetabit\Payment\Drivers\EdahabiaGateway`.
+*   **CIB**: Via la classe `Shetabit\Payment\Drivers\CibGateway`.
+
+### Configuration
+
+#### 1. Devise Dinar Algérien (DZD)
+Assurez-vous que la devise par défaut ou la devise pour vos transactions est configurée sur DZD dans votre fichier `config/payment.php`. Les passerelles Edahabia et CIB utiliseront cette devise.
+
+```php
+// config/payment.php
+return [
+    // ... autres configurations ...
+    'currency' => 'DZD',
+    // ...
+];
+```
+Si les API des passerelles algériennes requièrent un code devise numérique spécifique pour le DZD (par exemple, `012`), vous devrez vous assurer que la valeur passée correspond à leurs attentes, potentiellement en l'ajustant dans la configuration de la passerelle ou dans la logique du driver si nécessaire.
+
+#### 2. Configuration des Passerelles
+Ajoutez la configuration pour Edahabia et CIB dans la section `drivers` de votre fichier `config/payment.php`.
+
+**Important :** Les API pour Edahabia et CIB ne sont pas publiquement documentées. Vous **devez contacter Algérie Poste (pour Edahabia) et votre banque partenaire CIB** pour obtenir les URL d'API réelles, les identifiants marchand, les clés API, et la liste exacte des paramètres requis. Les exemples ci-dessous sont des illustrations.
+
+**Exemple pour EdahabiaGateway:**
+```php
+// config/payment.php
+'drivers' => [
+    // ... autres drivers ...
+    'edahabia' => [
+        'class' => \Shetabit\Payment\Drivers\EdahabiaGateway::class,
+        'merchantId' => env('EDAHABIA_MERCHANT_ID', 'VOTRE_ID_MARCHAND_EDAHABIA'),
+        'apiKey' => env('EDAHABIA_API_KEY', 'VOTRE_CLE_API_EDAHABIA'),
+        'paymentUrl' => env('EDAHABIA_PAYMENT_URL', 'URL_DE_REDIRECTION_EDAHABIA'), // Fourni par Algérie Poste
+        'apiUrl' => env('EDAHABIA_API_URL', 'URL_API_EDAHABIA_POUR_VERIFICATION'), // Fourni par Algérie Poste
+        'callbackUrl' => env('EDAHABIA_CALLBACK_URL', '/payment/edahabia/callback'), // Votre URL de callback
+        'currency' => 'DZD', // ou le code numérique si requis
+        // Ajoutez ici d'autres paramètres spécifiques à Edahabia si documentés par Algérie Poste
+    ],
+],
+```
+
+**Exemple pour CibGateway:**
+```php
+// config/payment.php
+'drivers' => [
+    // ... autres drivers ...
+    'cib' => [
+        'class' => \Shetabit\Payment\Drivers\CibGateway::class,
+        'cibMerchantId' => env('CIB_MERCHANT_ID', 'VOTRE_ID_MARCHAND_CIB'),
+        'cibAccessKey' => env('CIB_ACCESS_KEY', 'VOTRE_CLE_ACCES_CIB'),
+        'cibPaymentUrl' => env('CIB_PAYMENT_URL', 'URL_DE_REDIRECTION_CIB'), // Fourni par votre banque
+        'cibApiUrl' => env('CIB_API_URL', 'URL_API_CIB_POUR_VERIFICATION'), // Fourni par votre banque
+        'cibCallbackUrlSuccess' => env('CIB_CALLBACK_URL_SUCCESS', '/payment/cib/callback/success'), // Votre URL de callback succès
+        'cibCallbackUrlFail' => env('CIB_CALLBACK_URL_FAIL', '/payment/cib/callback/fail'), // Votre URL de callback échec
+        'currency' => 'DZD', // ou le code numérique si requis
+        // Ajoutez ici d'autres paramètres spécifiques à CIB si documentés par votre banque
+    ],
+],
+```
+Le nom du driver (ici `edahabia` et `cib`) est celui que vous utiliserez avec `Payment::via('driver_name')`.
+
+### Utilisation
+
+Voici comment initier un paiement et gérer le retour.
+
+**1. Initier le paiement et rediriger :**
+```php
+use Shetabit\Payment\Facade\Payment;
+use Illuminate\Http\Request; // Assurez-vous d'importer Request
+
+// Dans votre contrôleur
+public function initiatePayment(Request \$request, \$driverName) // \$driverName peut être 'edahabia' ou 'cib'
+{
+    \$invoice = Payment::via(\$driverName)
+        ->amount(1000.00) // Montant en DZD. Vérifiez si la passerelle attend des unités mineures (ex: centimes).
+        ->detail('order_id', 'ORDER_'.uniqid())
+        ->detail('description', 'Description de l'achat')
+        // Ajoutez d'autres détails requis par la passerelle ou pour votre application
+        ->purchase(); // Ceci appelle la méthode purchase() de votre Gateway
+
+    return \$invoice->pay(); // Ceci appelle la méthode pay() et retourne un RedirectionForm
+}
+```
+
+**2. Gérer le Callback et Vérifier la Transaction :**
+Créez les routes dans `routes/web.php` correspondant à vos `callbackUrl`.
+
+```php
+// routes/web.php
+Route::post('/payment/edahabia/callback', [EdahabiaController::class, 'handleCallback'])->name('payment.edahabia.callback');
+Route::post('/payment/cib/callback/success', [CibController::class, 'handleSuccessCallback'])->name('payment.cib.callback.success');
+Route::post('/payment/cib/callback/fail', [CibController::class, 'handleFailCallback'])->name('payment.cib.callback.fail');
+```
+
+```php
+// Dans votre contrôleur de callback (par exemple, EdahabiaController.php)
+use Shetabit\Payment\Facade\Payment;
+use Shetabit\Multipay\Exceptions\InvalidPaymentException;
+use Illuminate\Http\Request; // Assurez-vous d'importer Request
+use Illuminate\Support\Facades\Log;
+
+public function handleCallback(Request \$request) // Le nom du driver est implicite ici pour Edahabia
+{
+    try {
+        // Pour Edahabia, le driver est déduit du contexte de la requête ou de la config.
+        // Si vous avez plusieurs drivers, vous pourriez avoir besoin de le spécifier.
+        // Cependant, la logique de `shetabit/multipay` tente souvent de le résoudre.
+        // Pour plus de clarté, on pourrait aussi faire : Payment::driver('edahabia')->verify();
+
+        // La méthode verify() tentera d'utiliser le driver par défaut ou celui qui correspond à la requête.
+        // Si Edahabia est le seul driver configuré pour cette route, cela devrait fonctionner.
+        // Sinon, pour être explicite, surtout si plusieurs passerelles partagent des endpoints similaires (peu probable)
+        // ou si la détection automatique n'est pas fiable pour une raison quelconque :
+        // $receipt = Payment::via('edahabia')->verify();
+        \$receipt = Payment::verify(); // Appelle la méthode verify() de la passerelle concernée
+
+        // Paiement réussi
+        Log::info('Paiement réussi pour la transaction: ' . \$receipt->getReferenceId());
+        // Mettez à jour votre base de données, notifiez l'utilisateur, etc.
+        // \$receipt->getTransactionId() // ID interne de la facture
+        // \$receipt->getReferenceId() // ID de transaction de la passerelle
+        return view('payment-success-page', ['transaction_id' => \$receipt->getReferenceId()]);
+    } catch (InvalidPaymentException \$e) {
+        Log::error('Échec de la vérification du paiement: ' . \$e->getMessage());
+        // Paiement échoué, annulé par l'utilisateur, ou données de callback invalides
+        // Utiliser trans() pour les messages d'erreur venant des gateways
+        return view('payment-failed-page', ['error_message' => \$e->getMessage()]);
+    } catch (\Exception \$e) {
+        Log::error('Erreur générale lors de la vérification du paiement: ' . \$e->getMessage());
+        // Autre erreur technique
+        return view('payment-failed-page', ['error_message' => 'Une erreur technique est survenue.']);
+    }
+}
+```
+Adaptez la gestion du callback pour CIB en fonction de ses URL de succès et d'échec. La logique de vérification pour CIB sera similaire, potentiellement en spécifiant `Payment::via('cib')->verify()` si nécessaire.
+
+### Localisation (L10N)
+Le package supporte la localisation des messages d'erreur pour les passerelles Edahabia et CIB.
+*   Les fichiers de traduction sont publiés dans `resource_path('lang/vendor/shetabitPayment/')` lors de l'exécution de `php artisan vendor:publish --tag=payment-lang`. Vous pouvez les personnaliser, notamment les traductions arabes qui sont initialement des placeholders.
+*   Les clés de traduction utilisées dans `EdahabiaGateway.php` et `CibGateway.php` suivent le format `shetabitPayment::payment.key_name`.
+*   Pour traduire les textes de votre interface (par exemple, dans la vue `redirectForm.blade.php` que vous pouvez publier et modifier via `php artisan vendor:publish --tag=payment-views`), utilisez le système de localisation standard de Laravel.
+*   Pour l'arabe, assurez-vous que vos vues supportent l'affichage de droite à gauche (RTL).
+
+### Sécurité et Conformité Réglementaire
+*   **HTTPS**: Configurez **impérativement** toutes les URL d'API et de redirection des passerelles avec HTTPS. Ceci inclut vos `callbackUrl`.
+*   **Clés API**: Gardez vos identifiants marchand et clés API secrets et sécurisés (utilisez les fichiers `.env` et accédez-y via `env()` dans vos fichiers de configuration).
+*   **Conformité Locale**: Il est de **votre responsabilité** de vous assurer que votre intégration respecte toutes les lois et réglementations algériennes concernant les paiements en ligne, la facturation, et la protection des données. Consultez un conseiller juridique si nécessaire.
+*   **Vérification Serveur-Serveur**: La méthode `verify()` est conçue pour effectuer une vérification côté serveur avec la passerelle de paiement. Ne vous fiez **jamais** uniquement aux paramètres reçus dans l'URL de retour côté client pour valider un paiement.
+
+### Expérience Utilisateur (UX)
+*   Personnalisez la vue `redirectForm.blade.php` (publiable via `php artisan vendor:publish --tag=payment-views`) pour fournir des instructions claires à l'utilisateur avant la redirection vers la page de paiement externe.
+*   Affichez les logos d'Edahabia ou de CIB sur votre page de paiement ou de redirection pour rassurer l'utilisateur.
+*   Gérez clairement les pages de succès et d'échec après le retour de la passerelle, en informant l'utilisateur du statut de son paiement de manière compréhensible.
+*   Si les processus Edahabia ou CIB ont des étapes spécifiques (par exemple, saisie d'un OTP envoyé par SMS), informez-en l'utilisateur en amont si possible, ou assurez-vous que la page de la passerelle est claire.
+
+### Défis Potentiels et Solutions
+*   **Documentation des API**: La documentation technique détaillée et les spécifications des API Edahabia et CIB peuvent être difficiles à obtenir ou ne pas être publiques. Vous devrez impérativement contacter Algérie Poste (pour Edahabia) et les banques partenaires CIB (pour CIB) pour obtenir ces informations. Les squelettes de code `EdahabiaGateway.php` et `CibGateway.php` fournis dans ce package sont des implémentations génériques et devront **certainement être adaptés** en fonction des spécifications réelles de ces API (paramètres, endpoints, méthodes d'authentification, formats de réponse, etc.).
+*   **Support Technique**: Le support technique des institutions financières peut varier en termes de réactivité et d'expertise. Soyez patient et persévérant dans vos communications.
+*   **Tests**: Obtenir des environnements de test (sandbox) fonctionnels et fiables peut être un défi. Renseignez-vous dès le début de votre projet auprès des fournisseurs de services de paiement. Sans sandbox, les tests devront être effectués avec de petites transactions réelles, ce qui n'est pas idéal.
+*   **Mises à Jour des API**: Les API des systèmes de paiement peuvent évoluer. Restez en contact avec les fournisseurs pour être informé des changements potentiels qui pourraient affecter votre intégration.
+
+Nous encourageons la communauté à contribuer à l'amélioration de ce support pour l'Algérie, notamment en partageant des informations (non sensibles et publiquement autorisées) sur l'intégration une fois les API obtenues, en améliorant les traductions, ou en proposant des ajustements aux classes Gateway basés sur des expériences réelles.
 
 [ico-version]: https://img.shields.io/packagist/v/shetabit/payment.svg?style=flat-square
 [ico-download]: https://img.shields.io/packagist/dt/shetabit/payment.svg?color=%23F18&style=flat-square
