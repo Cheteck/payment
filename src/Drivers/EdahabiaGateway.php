@@ -9,8 +9,10 @@ use Shetabit\Multipay\Exceptions\PurchaseFailedException;
 use Shetabit\Multipay\Invoice;
 use Shetabit\Multipay\RedirectionForm;
 use Shetabit\Multipay\Request;
+use Shetabit\Payment\Contracts\HealthCheckableInterface;
+use Shetabit\Payment\Contracts\CurrencyAwareDriverInterface;
 
-class EdahabiaGateway extends Driver
+class EdahabiaGateway extends Driver implements HealthCheckableInterface, CurrencyAwareDriverInterface
 {
     protected Invoice $invoice;
     protected array $settings;
@@ -36,6 +38,8 @@ class EdahabiaGateway extends Driver
         // 'callback_url' => $this->settings['callbackUrl'],
         // ];
 
+        $timeout = $this->settings['timeout'] ?? 30; // Default 30 seconds
+        // Utiliser $timeout lors de l'appel HTTP, par exemple avec Http::timeout($timeout)->post(...)
         // $response = // ... appel API à Edahabia avec $data ...
 
         // if (!$response || !isset($response['transaction_id'])) {
@@ -91,6 +95,8 @@ class EdahabiaGateway extends Driver
         //     'transaction_id' => $transactionId,
         // ];
 
+        $timeout = $this->settings['timeout'] ?? 30; // Default 30 seconds
+        // Utiliser $timeout lors de l'appel HTTP
         // $response = // ... appel API de vérification à Edahabia ...
 
         // if (!$response || !isset($response['status'])) {
@@ -130,5 +136,50 @@ class EdahabiaGateway extends Driver
         }
 
         return $receipt;
+    }
+
+    public function checkHealth(): array
+    {
+        $details = [];
+        $configKeys = ['merchantId', 'apiKey', 'paymentUrl', 'apiUrl', 'callbackUrl'];
+        $allKeysPresent = true;
+
+        foreach ($configKeys as $key) {
+            $isPresent = !empty($this->settings[$key]);
+            $details["config_key_'.\$key.'_present"] = $isPresent;
+            if (!$isPresent) {
+                $allKeysPresent = false;
+            }
+        }
+
+        // Basic URL validation
+        foreach (['paymentUrl', 'apiUrl', 'callbackUrl'] as $urlKey) {
+            if (!empty($this->settings[$urlKey])) {
+                $isValid = filter_var($this->settings[$urlKey], FILTER_VALIDATE_URL);
+                $details["config_key_'.\$urlKey.'_valid_format"] = (bool)$isValid;
+                if (!$isValid) $allKeysPresent = false; // Consider invalid URL format an issue
+            }
+        }
+
+        // Placeholder for actual API connectivity check if a safe endpoint exists
+        // $details['api_connectivity'] = ['status' => 'ok', 'message' => 'Not implemented yet.'];
+
+        $status = $allKeysPresent ? 'ok' : 'error';
+        $message = $allKeysPresent ? 'Key configurations are present and URLs seem valid.' : 'One or more key configurations are missing or invalid.';
+
+        return ['status' => $status, 'message' => $message, 'details' => $details];
+    }
+
+    public function getSupportedCurrencies(): array
+    {
+        // Edahabia supporte probablement uniquement DZD. À confirmer avec leur API.
+        return ['DZD'];
+    }
+
+    public function expectsAmountInMinorUnits(): bool
+    {
+        // Supposons que Edahabia attend le montant dans l'unité principale (Dinars).
+        // À confirmer avec leur API. Si c'est en Santeem (centimes de Dinar), retourner true.
+        return false;
     }
 }

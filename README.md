@@ -524,6 +524,22 @@ The MIT License (MIT). Please see [License File](LICENSE.md) for more informatio
 
 Cette section décrit comment configurer et utiliser le package `shetabit/payment` pour les moyens de paiement populaires en Algérie : Edahabia (Algérie Poste) et CIB.
 
+**Note Importante Concernant les Passerelles à API Privée (Edahabia, CIB, etc.)**
+
+L'intégration de certaines passerelles de paiement, notamment celles spécifiques à des banques ou des systèmes nationaux comme Edahabia et CIB en Algérie, présente un défi particulier : **leurs API ne sont généralement pas publiques et leur documentation technique n'est pas librement accessible.**
+
+*   **Action Requise par le Développeur**: Vous devrez impérativement contacter directement l'institution financière concernée (Algérie Poste pour Edahabia, votre banque partenaire pour CIB) pour obtenir :
+    *   Leur dossier technique d'intégration API.
+    *   Vos identifiants marchand, clés API, et tout autre secret nécessaire.
+    *   Les URL exactes pour les endpoints de l'API (initiation de paiement, vérification, etc.) et pour la redirection de l'utilisateur.
+    *   La liste précise des paramètres attendus par leur API et le format des réponses.
+
+*   **Rôle des Drivers Fournis**: Les classes de driver comme `EdahabiaGateway.php` et `CibGateway.php` fournies dans ce package sont des **squelettes adaptables**. Elles offrent la structure de base et implémentent les interfaces requises par `shetabit/payment`. Cependant, la logique interne pour communiquer avec l'API réelle (les appels HTTP, le mappage des paramètres, l'interprétation des réponses) **devra très probablement être ajustée par vos soins** en fonction de la documentation technique que vous obtiendrez.
+
+*   **Configuration**: Les exemples de configuration dans ce README sont illustratifs. Les noms des clés de configuration (`merchantId`, `apiKey`, etc.) et surtout leurs valeurs doivent correspondre à ce qui est défini dans le dossier technique de la banque.
+
+L'intégration réussie de ces passerelles dépendra de la qualité des informations techniques fournies par l'institution financière et de votre capacité à adapter le driver en conséquence.
+
 ### Passerelles Supportées
 *   **Edahabia**: Via la classe `Shetabit\Payment\Drivers\EdahabiaGateway`.
 *   **CIB**: Via la classe `Shetabit\Payment\Drivers\CibGateway`.
@@ -561,6 +577,7 @@ Ajoutez la configuration pour Edahabia et CIB dans la section `drivers` de votre
         'apiUrl' => env('EDAHABIA_API_URL', 'URL_API_EDAHABIA_POUR_VERIFICATION'), // Fourni par Algérie Poste
         'callbackUrl' => env('EDAHABIA_CALLBACK_URL', '/payment/edahabia/callback'), // Votre URL de callback
         'currency' => 'DZD', // ou le code numérique si requis
+        'timeout' => env('EDAHABIA_TIMEOUT', 30), // en secondes
         // Ajoutez ici d'autres paramètres spécifiques à Edahabia si documentés par Algérie Poste
     ],
 ],
@@ -580,11 +597,13 @@ Ajoutez la configuration pour Edahabia et CIB dans la section `drivers` de votre
         'cibCallbackUrlSuccess' => env('CIB_CALLBACK_URL_SUCCESS', '/payment/cib/callback/success'), // Votre URL de callback succès
         'cibCallbackUrlFail' => env('CIB_CALLBACK_URL_FAIL', '/payment/cib/callback/fail'), // Votre URL de callback échec
         'currency' => 'DZD', // ou le code numérique si requis
+        'timeout' => env('CIB_TIMEOUT', 30), // en secondes
         // Ajoutez ici d'autres paramètres spécifiques à CIB si documentés par votre banque
     ],
 ],
 ```
 Le nom du driver (ici `edahabia` et `cib`) est celui que vous utiliserez avec `Payment::via('driver_name')`.
+L'option `timeout` (en secondes) peut être utilisée pour spécifier la durée maximale d'attente pour les réponses des API de la passerelle.
 
 ### Utilisation
 

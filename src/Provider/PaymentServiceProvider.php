@@ -11,6 +11,7 @@ use Shetabit\Multipay\Payment;
 use Shetabit\Multipay\Request;
 use Shetabit\Payment\Events\InvoicePurchasedEvent;
 use Shetabit\Payment\Events\InvoiceVerifiedEvent;
+use Shetabit\Payment\Commands;
 
 class PaymentServiceProvider extends ServiceProvider
 {
@@ -89,6 +90,12 @@ class PaymentServiceProvider extends ServiceProvider
                 ]
             );
         });
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                Commands\PaymentCheckGatewayCommand::class,
+            ]);
+        }
     }
 
     /**

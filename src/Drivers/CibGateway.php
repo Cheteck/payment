@@ -9,8 +9,10 @@ use Shetabit\Multipay\Exceptions\PurchaseFailedException;
 use Shetabit\Multipay\Invoice;
 use Shetabit\Multipay\RedirectionForm;
 use Shetabit\Multipay\Request;
+use Shetabit\Payment\Contracts\HealthCheckableInterface;
+use Shetabit\Payment\Contracts\CurrencyAwareDriverInterface;
 
-class CibGateway extends Driver
+class CibGateway extends Driver implements HealthCheckableInterface, CurrencyAwareDriverInterface
 {
     protected Invoice $invoice;
     protected array $settings;
@@ -37,6 +39,8 @@ class CibGateway extends Driver
         // 'return_url_fail' => $this->settings['cibCallbackUrlFail'], // URL de retour échec
         // ];
 
+        $timeout = $this->settings['timeout'] ?? 30; // Default 30 seconds
+        // Utiliser $timeout lors de l'appel HTTP
         // $response = // ... appel API à CIB avec $data ...
 
         // if (!$response || !isset($response['transaction_token'])) { // ou le nom du champ attendu
@@ -93,6 +97,8 @@ class CibGateway extends Driver
         // 'transaction_ref' => $cibTransactionRef,
         // ];
 
+        $timeout = $this->settings['timeout'] ?? 30; // Default 30 seconds
+        // Utiliser $timeout lors de l'appel HTTP
         // $response = // ... appel API de vérification à CIB ...
 
         // if (!$response || !isset($response['verified_status'])) {
@@ -130,5 +136,44 @@ class CibGateway extends Driver
         // }
 
         return $receipt;
+    }
+
+    public function checkHealth(): array
+    {
+        $details = [];
+        $configKeys = ['cibMerchantId', 'cibAccessKey', 'cibPaymentUrl', 'cibApiUrl', 'cibCallbackUrlSuccess', 'cibCallbackUrlFail'];
+        $allKeysPresent = true;
+
+        foreach ($configKeys as $key) {
+            $isPresent = !empty($this->settings[$key]);
+            $details["config_key_'.\$key.'_present"] = $isPresent;
+            if (!$isPresent) {
+                $allKeysPresent = false;
+            }
+        }
+        foreach (['cibPaymentUrl', 'cibApiUrl', 'cibCallbackUrlSuccess', 'cibCallbackUrlFail'] as $urlKey) {
+            if (!empty($this->settings[$urlKey])) {
+                $isValid = filter_var($this->settings[$urlKey], FILTER_VALIDATE_URL);
+                $details["config_key_'.\$urlKey.'_valid_format"] = (bool)$isValid;
+                if (!$isValid) $allKeysPresent = false;
+            }
+        }
+
+        $status = $allKeysPresent ? 'ok' : 'error';
+        $message = $allKeysPresent ? 'Key configurations are present and URLs seem valid.' : 'One or more key configurations are missing or invalid.';
+
+        return ['status' => $status, 'message' => $message, 'details' => $details];
+    }
+
+    public function getSupportedCurrencies(): array
+    {
+        // CIB supporte probablement uniquement DZD. À confirmer.
+        return ['DZD'];
+    }
+
+    public function expectsAmountInMinorUnits(): bool
+    {
+        // Supposons DZD unité principale. À confirmer.
+        return false;
     }
 }
